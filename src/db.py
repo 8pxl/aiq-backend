@@ -1,11 +1,17 @@
+from datetime import datetime
+from typing import Any
 from sqlalchemy import Engine
-from sqlmodel import Session
-from tables import Qualification, Teams
+from sqlmodel import Session, select
+from tables import Qualification, Teams, Metadata
 
-
-def upsert(engine: Engine, team: Teams):
+def get_all_teams(engine: Engine) -> list[int]:
+    ids = []
     with Session(engine) as session:
-        _ = session.merge(team)
+        return list(session.exec(select(Teams.id)).all())
+
+def upsert(engine: Engine, x: Any):
+    with Session(engine) as session:
+        _ = session.merge(x)
         session.commit()
 
 def qualify(engine: Engine, id: int):
@@ -17,7 +23,13 @@ def qualify(engine: Engine, id: int):
         else:
             existing.qualification = Qualification.WORLD
         session.commit();
-        
+def set_update_time(engine: Engine):
+    with Session(engine) as session:
+        session.get(Metadata)
+
+def get_last_qualification_update(engine: Engine)-> datetime: 
+    with Session(engine) as session:
+        return(session.exec(select(Metadata.last_updated_qualifications)).one())
 
     # existing = session.get(Teams, team.id)
     #     if not existing:
