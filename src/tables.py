@@ -23,6 +23,7 @@ class Teams(SQLModel, table=True):
     registered: bool
     grade: str
     qualification: Qualification
+    world_rank: int
     score: int
     programming: int
     driver: int
