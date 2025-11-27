@@ -1,5 +1,8 @@
 from __future__ import annotations
-from sqlmodel import Field, SQLModel
+from datetime import datetime
+from sqlalchemy.orm import Mapped
+from typing_extensions import Optional
+from sqlmodel import Column, Field, ForeignKey, Integer, Relationship, SQLModel
 from enum import Enum
 
 class Qualification(Enum):
@@ -15,16 +18,32 @@ class Qualification(Enum):
         }
         return mapping.get(s, cls.NONE)
 
+class Metadata(SQLModel,table=True):
+    last_updated_qualifications: datetime = datetime.now()
+
+class Qualifications(SQLModel, table=True):
+    team_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("teams.id", ondelete="CASCADE"),
+            primary_key=True,
+        )
+    )
+    status: Qualification
+    team: Teams = Relationship(back_populates="qualification_status")
+
 class Teams(SQLModel, table=True):
     id: int = Field(primary_key=True)
     number: str
     organization: str
     country: str
     region: str
-    registered: bool
     grade: str
-    qualification: Qualification
+    # qualification: Qualification
     world_rank: int
     score: int
     programming: int
     driver: int
+    qualification_status: Qualifications = Relationship(back_populates="team")
+
+
