@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any
 import requests
 from enum import Enum
@@ -85,27 +86,30 @@ class RobotEvents:
             self.logger.exception("API request failed: %s %s", url, exc)
         res = res.json()
         teams = []
+        start = time.time()
         for team in res:
-            print("adding team ", team['number'])
-            country: str = res['location']['country'],  # pyright: ignore[reportAny, reportAssignmentType]
-            region: str| None = res['location']['region']
+            print("took", time.time() - start)
+            print("adding team ", team['team']['team'])
+            start = time.time()
+            tt = team['team']
+            country: str = tt['country'],  # pyright: ignore[reportAny, reportAssignmentType]
+            region: str| None = tt['region']
             if not region:
                 region = country
             teams.append(Teams(
-                id =team['id'],  # pyright: ignore[reportAny] 
-                number = team['number'],  # pyright: ignore[reportAny]
-                organization =team['organization'],   # pyright: ignore[reportAny]
+                id = tt['id'],  # pyright: ignore[reportAny] 
+                number = tt['team'],  # pyright: ignore[reportAny]
+                organization = tt['organization'],   # pyright: ignore[reportAny]
                 country = country,
                 region = region,
-                registered = team['registered'],  # pyright: ignore[reportAny]
-                grade = res['grade'],  # pyright: ignore[reportAny]
-                qualification = self.get_qualifications(res['id']),  # pyright: ignore[reportAny]
+                grade = tt['gradeLevel'],  # pyright: ignore[reportAny]
+                qualification = self.get_qualifications(team['team']['id']),  # pyright: ignore[reportAny]
                 world_rank = team["rank"],
                 score = team["scores"]["score"],
                 programming = team["scores"]["programming"],
                 driver = team["scores"]["driver"]
             ))
-            if (len(teams) >=100):
+            if (len(teams) >=5):
                 break
         return teams
 
