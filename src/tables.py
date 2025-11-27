@@ -20,6 +20,7 @@ class Teams(SQLModel, table=True):
     number: str
     organization: str
     country: str
+    region: str
     registered: bool
     grade: str
     qualification: Qualification
