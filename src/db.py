@@ -2,16 +2,30 @@ from datetime import datetime
 from typing import Any
 from sqlalchemy import Engine
 from sqlmodel import Session, select
-from tables import Qualification, Teams, Metadata
+from tables import Qualification, Qualifications, Teams
+
+
+def number_to_id(engine: Engine, number: str) -> int:
+    with Session(engine) as session:
+        return session.exec(select(Teams.id).where(Teams.number==number)).one()
 
 def get_all_teams(engine: Engine) -> list[int]:
     ids = []
     with Session(engine) as session:
-        return list(session.exec(select(Teams.id)).all())
+        return list(session.exec(select(Teams.id).where(Teams.region=="California - Region 4").where(Teams.grade=="High School")).all())
 
 def upsert(engine: Engine, x: Any):
     with Session(engine) as session:
         _ = session.merge(x)
+        session.commit()
+
+def upsert_quals(engine: Engine, x: Qualifications):
+    with Session(engine) as session:
+        qual = session.get(Qualifications, x.team_id)
+        if not qual:
+            session.add(x)
+        else:
+            qual.status = Qualification(max(qual.status.value, x.status.value))
         session.commit()
 
 def qualify(engine: Engine, id: int):
@@ -23,13 +37,14 @@ def qualify(engine: Engine, id: int):
         else:
             existing.qualification = Qualification.WORLD
         session.commit();
-def set_update_time(engine: Engine):
-    with Session(engine) as session:
-        session.get(Metadata)
 
-def get_last_qualification_update(engine: Engine)-> datetime: 
-    with Session(engine) as session:
-        return(session.exec(select(Metadata.last_updated_qualifications)).one())
+# def set_update_time(engine: Engine):
+#     with Session(engine) as session:
+#         session.get(Metadata)
+
+# def get_last_qualification_update(engine: Engine)-> datetime: 
+#     with Session(engine) as session:
+#         return(session.exec(select(Metadata.last_updated_qualifications)).one())
 
     # existing = session.get(Teams, team.id)
     #     if not existing:
