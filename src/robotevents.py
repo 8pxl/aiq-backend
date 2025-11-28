@@ -22,18 +22,22 @@ class RobotEvents:
             "Authorization": f"Bearer {token}"
         }
 
-    def request(self, path: str) -> Any | None:  # pyright: ignore[reportExplicitAny]
+    def request(self, path: str, max_retries = 5, delay = 17) -> Any | None:  # pyright: ignore[reportExplicitAny]
         if not path.startswith("/"):
             self.logger.exception("path needs to start with a blackslash")
             return (None)
         url = self.base + path
-        res = requests.get(url, headers=self.header)
-        try:
-            res.raise_for_status()
-        except requests.RequestException as exc:
-            self.logger.exception("API request failed: %s %s", url, exc)
-            return None
-        return res.json()  # pyright: ignore[reportAny]
+        for attempt in range(max_retries):
+            res = requests.get(url, headers=self.header)
+            try:
+                res.raise_for_status()
+                return res.json()  # pyright: ignore[reportAny]
+            except requests.RequestException as exc:
+                self.logger.exception("API request failed: %s %s", url, exc)
+                if attempt < max_retries-1:
+                    print(f"failed retry {attempt}, waiting, {delay} seconds")
+                    time.sleep(delay)
+        return None
 
     def get_qualifications(self, robotevents_id: int) -> Qualification:
         awards = self.request(f"/teams/{str(robotevents_id)}/awards?season%5B%5D={self.season}")
@@ -77,8 +81,11 @@ class RobotEvents:
     #     )
     #     return team
     #
-    def parse_skills(self) ->list[Teams]:
-        url = f"https://www.robotevents.com/api/seasons/{self.season}/skills?post_season=0&grade_level=High%20School"
+    def parse_skills(self, ms: bool) ->list[Teams]:
+        if ms:
+            url = f"https://www.robotevents.com/api/seasons/{self.season}/skills?post_season=0&grade_level=Middle%20School"
+        else:
+            url = f"https://www.robotevents.com/api/seasons/{self.season}/skills?post_season=0&grade_level=High%20School"
         res = requests.get(url)
         try:
             res.raise_for_status()
@@ -93,7 +100,7 @@ class RobotEvents:
             start = time.time()
             tt = team['team']
             country: str = tt['country'],  # pyright: ignore[reportAny, reportAssignmentType]
-            region: str| None = tt['region']
+            region: str| None = tt['eventRegion']
             if not region:
                 region = country
             teams.append(Teams(
@@ -109,7 +116,8 @@ class RobotEvents:
                 programming = team["scores"]["programming"],
                 driver = team["scores"]["driver"]
             ))
-            if (len(teams) >=3000):
+            if (len(teams) >=10000):
+                print("10000 limit reached! ")
                 break
         return teams
 
@@ -140,9 +148,11 @@ class RobotEvents:
         worlds_teams = None
         q = Qualification.NONE
         qualifications: list[Qualifications] = []
+        now = time.time()
         for team in teams:
-            print(len(qualifications))
-            if len(qualifications) > 5:
+            print(time.time() - now)
+            now = time.time()
+            if len(qualifications) > 1000:
                 break;
             if worlds_teams and team in worlds_teams:
                 q = Qualification.WORLD
@@ -156,8 +166,41 @@ class RobotEvents:
             )
         return qualifications
     
-    def create_qualifications_worlds_fast(self, teams: list[int]) -> list[Qualifications] | None:
+    def create_qualifications_worlds(self, teams: list[int]) -> list[Qualifications] | None:
         worlds_teams = self.get_worlds_teams()
         if not worlds_teams:
             return None
         return ([Qualifications(team_id=id, status = Qualification.WORLD) for id in worlds_teams])
+
+    def award_contains(self, award:str, strings: list[str]) -> bool:
+        for s in strings:
+            if (s in award):
+                return True
+        return False
+
+    def create_qualifications_sig(self) -> list[Qualifications] | None:
+        res = self.request(f"/events?season%5B%5D={self.season}&level%5B%5D=Signature&myEvents=false")
+        if not res:
+            return None
+        ids: list[int] = []
+        sig_quals = ["Excellence", "Tournament Champions"]
+        qualified: list[Qualifications] = []
+        for event in res["data"]:
+            if (event["awards_finalized"]):
+                ids.append(event["id"])
+        for id in ids:
+            print("checking sig: ", id)
+            res = self.request(f"/events/{id}/awards")
+            if not res:
+                self.logger.exception("failed GET on event id ", id)
+                continue
+            for award in res["data"]:
+                if self.award_contains(award["title"], sig_quals):
+                    for winner in award["teamWinners"]:
+                        qualified.append(
+                            Qualifications(
+                                team_id = winner["team"]["id"],
+                                status = Qualification.WORLD
+                            )
+                        )
+        return qualified
